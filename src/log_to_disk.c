@@ -1,3 +1,42 @@
+#include <string.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <stdio.h>  // Include this for printf
+
+#include "addcall.h"
+#include "addspot.h"
+#include "gettxinfo.h"
+#include "globalvars.h"
+#include "lancode.h"
+#include "log_utils.h"
+#include "makelogline.h"
+#include "scroll_log.h"
+#include "score.h"
+#include "store_qso.h"
+#include "setcontest.h"
+#include "tlf_curses.h"
+#include "ui_utils.h"
+#include "cleanup.h"
+#include "tlf.h"
+#include "loc.h"
+
+pthread_mutex_t disk_mutex = PTHREAD_MUTEX_INITIALIZER;
+char lan_logline[81];
+char grid_square[7];
+
+/* restart band timer if in wpx and qso on a new band */
+void restart_band_timer(void) {
+    static int lastbandinx = 0;
+
+    if (CONTEST_IS(WPX)) {
+        if (lastbandinx != bandinx) {
+            lastbandinx = bandinx;
+            minute_timer = 600; /* 10-minute timer */
+        }
+    }
+}
+
+/* logs one record to disk */
 void log_to_disk(int from_lan) {
     FILE *mobile_log_file = fopen("mobile_log.adi", "a"); // Open for appending
     if (mobile_log_file == NULL) {
@@ -11,7 +50,7 @@ void log_to_disk(int from_lan) {
         // Remember call and report for resend after QSO
         strcpy(lastcall, current_qso.call);
 
-        // Use normalized comment if available
+        // Use a normalized comment if available
         if (strlen(current_qso.normalized_comment) > 0) {
             strcpy(current_qso.comment, current_qso.normalized_comment);
         }
@@ -19,27 +58,21 @@ void log_to_disk(int from_lan) {
         restart_band_timer();
 
         struct qso_t *qso = collect_qso_data();
-        addcall(qso); // Add call to dupe list
+        addcall(qso); // Add call to the dupe list
 
-       // Log the QSO to the "mobile_log" file in ADIF format
-       fprintf(mobile_log_file, "<CALL:%d>%s\n", strlen(current_qso.call), current_qso.call);
-       fprintf(mobile_log_file, "<BAND:%d>%s\n", strlen(current_qso.band), current_qso.band);
-       fprintf(mobile_log_file, "<MODE:%d>%s\n", strlen(current_qso.mode), current_qso.mode);
-       fprintf(mobile_log_file, "<FREQ:%d>%s\n", strlen(current_qso.freq), current_qso.freq);
-       fprintf(mobile_log_file, "<OPERATOR:%d>%s\n", strlen(current_qso.operator), current_qso.operator);
-       fprintf(mobile_log_file, "<TIME_ON:%d>%s\n", strlen(current_qso.time_on), current_qso.time_on);
+        // Log the QSO to the "mobile_log" file in ADIF format
+        fprintf(mobile_log_file, "<CALL:%d>%s\n", (int)strlen(qso->call), qso->call);
+        fprintf(mobile_log_file, "<MODE:%d>%s\n", (int)strlen(qso->mode), qso->mode);
+        fprintf(mobile_log_file, "<FREQ:%lf>%lf\n", qso->freq, qso->freq);
+        fprintf(mobile_log_file, "<OPERATOR:%d>%s\n", (int)strlen(qso->operator), qso->operator);
+        fprintf(mobile_log_file, "<TIME_ON:%s>%s\n", qso->time_on, qso->time_on);
 
-       // Add the grid square to the mobile log
-       fprintf(mobile_log_file, "<GRIDSQUARE:%d>%s\n", strlen(grid_square), grid_square);
-
-
-        // Add more fields as needed
-        // For example, if you have a frequency field, add it here:
-        // fprintf(mobile_log_file, "<FREQ:%d>%s\n", strlen(current_qso.freq), current_qso.freq);
+        // Use the grid_square variable from loc.c
+        fprintf(mobile_log_file, "<GRIDSQUARE:%d>%s\n", (int)strlen(grid_square), grid_square);
 
         score_qso(qso);
         char *logline = makelogline(qso);
-        qso->logline = logline; /* Remember formatted line in qso entry */
+        qso->logline = logline; /* Remember the formatted line in the qso entry */
 
         store_qso(logfile, logline);
         g_ptr_array_add(qso_array, qso);
@@ -57,7 +90,7 @@ void log_to_disk(int from_lan) {
         char *fill = g_strnfill(80 - strlen(lan_logline), ' ');
         g_strlcat(lan_logline, fill, 81); /* Fill with spaces if needed */
 
-        if (cqwwm2) { /* Mark as coming from other station */
+        if (cqwwm2) { /* Mark as coming from the other station */
             if (lan_message[0] != thisnode) {
                 lan_logline[79] = '*';
             }
@@ -69,13 +102,10 @@ void log_to_disk(int from_lan) {
         addcall2();
 
         // Log the QSO to the "mobile_log" file in ADIF format
-        fprintf(mobile_log_file, "<CALL:%d>%s\n", strlen(current_qso.call), current_qso.call);
-        fprintf(mobile_log_file, "<BAND:%d>%s\n", strlen(current_qso.band), current_qso.band);
+        fprintf(mobile_log_file, "<CALL:%zu>%s\n", strlen(current_qso.call), current_qso.call);
 
         // Add the grid square to the mobile log
-        fprintf(mobile_log_file, "<GRIDSQUARE:%d>%s\n", strlen(grid_square), grid_square);
-
-        // Add more fields as needed
+        fprintf(mobile_log_file, "<GRIDSQUARE:%zu>%s\n", strlen(grid_square), grid_square);
 
         store_qso(logfile, lan_logline);
         g_ptr_array_add(qso_array, qso);
@@ -90,7 +120,7 @@ void log_to_disk(int from_lan) {
     scroll_log();
     lan_mutex = 0;
 
-    attron(modify_attr(COLOR_PAIR(NORMCOLOR)); /* Erase comment field */
+    attron(modify_attr(COLOR_PAIR(NORMCOLOR)));
 
     if (!from_lan) {
         mvaddstr(12, 54, spaces(contest->exchange_width));
@@ -130,4 +160,4 @@ void log_to_disk(int from_lan) {
 
     // Close the "mobile_log" file at the end of the function.
     fclose(mobile_log_file);
-}
+};

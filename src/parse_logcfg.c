@@ -43,6 +43,7 @@
 #include "getwwv.h"
 #include "ignore_unused.h"
 #include "lancode.h"
+#include "loc.c"
 #include "utils.h"
 #include "parse_logcfg.h"
 #include "qtcvars.h"		// Includes globalvars.h
@@ -1417,6 +1418,7 @@ static config_t logcfg_configs[] = {
     {"RESEND_CALL",         NEED_PARAM, cfg_resend_call},
     {"GENERIC_MULT",        NEED_PARAM, cfg_generic_mult},
     {"OPERATING_MODE",      NEED_PARAM, cfg_operating_mode},
+
 
     {NULL}  // end marker
 };
