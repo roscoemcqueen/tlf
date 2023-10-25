@@ -217,10 +217,13 @@ struct qso_t {
     int tx;
     int qsots;
     char *mult1_value;
-    char *callupdate;           // transient field, used in checkexchange
-    char *normalized_comment;   // transient field
-    char *section;              // transient field
+    char *callupdate;
+    char *normalized_comment;
+    char *section;
+    char *operator; // Define the 'operator' member
+    char *time_on;  // Define the 'time_on' member
 };
+
 
 
 void refreshp();
